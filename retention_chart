@@ -1,1 +1,69 @@
+import pandas as pd
+import numpy
 import matplotlib.pylab as plt
+import datetime as dt
+import csv 
+import matplotlib.ticker as ticker
+import seaborn as sns
+
+#load csv into a dateframe 
+go_mo_df = pd.read_csv('/Users/matthewgarcia/Documents/launched_application_events.csv')
+
+#transforming event time column to a datetime format 
+go_mo_df['event_time'] = pd.to_datetime(go_mo_df['event_time'])
+
+#function for getting the launch day 
+def getting_day(d):
+    return dt.datetime(d.year, d.month, d.day) 
+
+#using the above function 
+go_mo_df['launch-day'] = go_mo_df['event_time'].apply(getting_day)
+
+#indexing a column for the first month visit of the customer 
+go_mo_df['cohort-day'] = go_mo_df.groupby('user_id')['launch-day'].transform('min')
+
+#function for data to create a series 
+def get_date_elements(df, column):
+    year= df[column].dt.year 
+    month= df[column].dt.month
+    day = df[column].dt.day
+    return year, month, day 
+
+#getting date for columns and first launch 
+Launchyear, Launchmonth, Launchday = get_date_elements(go_mo_df, 'launch-day')
+Cohortyear, Cohortmonth, Cohortday = get_date_elements(go_mo_df, 'cohort-day') 
+
+#cohort index creation 
+daydifference = Launchday - Cohortday
+monthdifference = Launchmonth - Cohortmonth
+go_mo_df['cohort-index'] = daydifference 
+
+#counting user id 
+cohort_data = go_mo_df.groupby(['cohort-day', 'cohort-index'])['user_id'].apply(pd.Series.nunique).reset_index()
+
+#pivot table creation 
+cohort_table = cohort_data.pivot(index='cohort-day', columns=['cohort-index'], values='user_id')
+
+#changing index of the cohort table 
+cohort_table.index = cohort_table.index.strftime('%B %d')
+
+#creation of heatmap and visualization 
+plt.figure(figsize=(21, 10))
+heatmap = sns.heatmap(cohort_table, annot = True, cmap='Greens', fmt='g')
+
+#get the color bar axis 
+cbar = heatmap.collections[0].colorbar 
+
+#set the tick lael formatter to disable scientific notation 
+cbar.ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: '{:.0f}'.format(x)))
+
+#cohort for percentage analysis 
+new_cohort_table = cohort_table.divide(cohort_table.iloc[:,0], axis=0)
+
+#creating a percentage visualization 
+plt.figure(figsize=(21, 10))
+colormap=sns.color_palette("mako", as_cmap=True) 
+sns.heatmap(new_cohort_table, annot=True, fmt='.0%', cmap=colormap) 
+
+#show heatmaps
+plt.show()
